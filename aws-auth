@@ -12,9 +12,13 @@ home = expanduser("~")
 aws_accounts_file = home+'/.aws/aws-accounts.json'
 aws_config_file  = home+'/.aws/config'
 aws_credentials_file  = home+'/.aws/credentials'
-aws_credentials_string_builder = ""
-aws_config_string_builder = ""
 
+aws_credentials_string_builder = ""
+aws_credentials_string_builder += "[default]"+"\n"
+aws_credentials_string_builder += "aws_access_key_id = non-existent-key"+"\n"
+aws_credentials_string_builder += "aws_secret_access_key = non-existent-key"+"\n"
+
+aws_config_string_builder = ""
 aws_config_string_builder += "[default]"+"\n"
 aws_config_string_builder += "output = json"+"\n"
 aws_config_string_builder += "region = us-east-1"+"\n"+"\n"
@@ -27,6 +31,8 @@ for c in aws_credentials['accounts']:
     aws_access_key_id=c['aws_access_key_id']
     aws_secret_access_key=c['aws_secret_access_key']
     aws_mfa_device=c['aws_mfa_device']
+
+    print(c)
 
     sts_client = boto3.client(
         'sts',
@@ -60,11 +66,14 @@ for c in aws_credentials['accounts']:
         c['aws_access_key_id'] = iam_response['AccessKey']['AccessKeyId']
         c['aws_secret_access_key'] = iam_response['AccessKey']['SecretAccessKey']
 
-        aws_credentials_string_builder += "["+c["name"] + "-long-term]"+"\n"
-        aws_credentials_string_builder += "aws_access_key_id = " + c['aws_access_key_id'] +"\n"
-        aws_credentials_string_builder += "aws_secret_access_key = " + c['aws_secret_access_key']+"\n"
-        aws_credentials_string_builder += "aws_mfa_device = " + c['aws_mfa_device']+"\n"
-        aws_credentials_string_builder += "\n"
+        acsb = "["+c["name"] + "-long-term]"+"\n"
+        acsb += "aws_access_key_id = " + c['aws_access_key_id'] +"\n"
+        acsb += "aws_secret_access_key = " + c['aws_secret_access_key']+"\n"
+        acsb += "aws_mfa_device = " + c['aws_mfa_device']+"\n"
+        acsb += "\n"
+
+        print(acsb)
+        aws_credentials_string_builder += acsb
 
         aws_credentials_string_builder += "["+c["name"] + "]"+"\n"
         aws_credentials_string_builder += "aws_access_key_id = "     + sts_response['Credentials']['AccessKeyId'] +"\n"
