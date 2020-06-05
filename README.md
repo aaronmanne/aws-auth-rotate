@@ -17,7 +17,9 @@ Create the file $HOME/.aws/aws-accounts.json  with the following format
             "aws_access_key_id": "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
             "aws_secret_access_key": "SUPERSECRETKEYAWSGAVEME",
             "aws_mfa_device": "arn:aws:iam::123456789102:mfa/myiamusername",
-            "aws_mfa_duration": 129600
+            "aws_mfa_duration": 129600,
+            "role_arn": "SOMEROLE",
+            "source_profile": ""
         }
     ]
 }
