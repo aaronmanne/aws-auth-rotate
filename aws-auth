@@ -32,7 +32,6 @@ aws_config_string_builder += "[default]"+"\n"
 aws_config_string_builder += "output = json"+"\n"
 aws_config_string_builder += "region = us-east-1"+"\n"+"\n"
 
-
 def generate_pass(length=20):
     """Function to generate a password"""
     password = []
@@ -58,8 +57,6 @@ for c in aws_credentials['accounts']:
         aws_config_string_builder += "output = json"+"\n"
         aws_config_string_builder += "region = us-east-1"+"\n"+"\n"
         continue
-
-    #print(c)
 
     sts_client = boto3.client(
         'sts',
