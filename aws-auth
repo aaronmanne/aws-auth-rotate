@@ -7,6 +7,15 @@ import botocore
 from boto.s3.connection import S3Connection
 from boto.sts import STSConnection
 import pyotp
+import secrets
+import string
+
+update_password = False
+if len(sys.argv) > 1:
+    if "p" in sys.argv[1].strip():
+        update_password = True
+        print("## Rotating all account passwords. ")
+        print()
 
 home = expanduser("~")
 aws_accounts_file = home+'/.aws/aws-accounts.json'
@@ -23,6 +32,14 @@ aws_config_string_builder += "[default]"+"\n"
 aws_config_string_builder += "output = json"+"\n"
 aws_config_string_builder += "region = us-east-1"+"\n"+"\n"
 
+
+def generate_pass(length=20):
+    """Function to generate a password"""
+    password = []
+    alphabet = string.ascii_letters + '!@#$%^&*()_+-=[]{}|\'' + string.digits
+    password = ''.join(secrets.choice(alphabet) for i in range(length)) 
+    return password
+
 with open(aws_accounts_file, "r") as json_file:
     aws_credentials = json.load(json_file)
 
@@ -31,8 +48,18 @@ for c in aws_credentials['accounts']:
     aws_access_key_id=c['aws_access_key_id']
     aws_secret_access_key=c['aws_secret_access_key']
     aws_mfa_device=c['aws_mfa_device']
+    
+    if not aws_access_key_id:
+        aws_credentials_string_builder += "["+c["alias"] + "]"+"\n"
+        aws_credentials_string_builder += "role_arn = "              + c['role_arn'] +"\n"
+        aws_credentials_string_builder += "source_profile = "        + c['source_profile'] + "\n"
+        aws_credentials_string_builder += "\n"
+        aws_config_string_builder += "[profile "+c["alias"] + "]"+"\n"
+        aws_config_string_builder += "output = json"+"\n"
+        aws_config_string_builder += "region = us-east-1"+"\n"+"\n"
+        continue
 
-    print(c)
+    #print(c)
 
     sts_client = boto3.client(
         'sts',
@@ -40,55 +67,73 @@ for c in aws_credentials['accounts']:
         aws_secret_access_key=c['aws_secret_access_key']
     )
     try:
-        print("### Updating", c['name'], "  --  Current OTP:", totp.now())
         sts_response = sts_client.get_session_token(
             DurationSeconds=c['aws_mfa_duration'], 
             SerialNumber=aws_mfa_device,
             TokenCode=totp.now()
         )
-
         iam_client = boto3.client(
             'iam',
             aws_access_key_id=sts_response['Credentials']['AccessKeyId'],
             aws_secret_access_key=sts_response['Credentials']['SecretAccessKey'],
             aws_session_token=sts_response['Credentials']['SessionToken'],
         )
+        print("### ", c['alias'], "  --  Current OTP:", totp.now())
+        # Password Update
+        if update_password is True:
+            try:
+                newpass = generate_pass()
+                iam_pass_response = iam_client.update_login_profile(
+                    UserName=c['iamuser'],
+                    Password=newpass,
+                    PasswordResetRequired=False
+                )
+                print("### NEW PASSWORD SET;")
+                print(str(newpass))
+                print()
+            except botocore.exceptions.ClientError as e:
+                print("### ERROR: {}".format(e))
+                print()
+                pass
+        else:
+            iam_response = iam_client.create_access_key(
+                UserName=c['iamuser'],
+            )            
+            # Key Update
+            iam_client.delete_access_key(
+                AccessKeyId=c['aws_access_key_id'],
+                UserName=c['iamuser']
+            )
 
-        iam_response = iam_client.create_access_key(
-            UserName=c['iamuser'],
-        )
+            c['aws_access_key_id'] = iam_response['AccessKey']['AccessKeyId']
+            c['aws_secret_access_key'] = iam_response['AccessKey']['SecretAccessKey']
 
-        iam_client.delete_access_key(
-            AccessKeyId=c['aws_access_key_id'],
-            UserName=c['iamuser']
-        )
+            acsb = "["+c["alias"] + "-long-term]"+"\n"
+            acsb += "aws_access_key_id = " + c['aws_access_key_id'] +"\n"
+            acsb += "aws_secret_access_key = " + c['aws_secret_access_key']+"\n"
+            acsb += "aws_mfa_device = " + c['aws_mfa_device']+"\n"
+            acsb += "\n"
 
-        c['aws_access_key_id'] = iam_response['AccessKey']['AccessKeyId']
-        c['aws_secret_access_key'] = iam_response['AccessKey']['SecretAccessKey']
+            print(acsb)
 
-        acsb = "["+c["name"] + "-long-term]"+"\n"
-        acsb += "aws_access_key_id = " + c['aws_access_key_id'] +"\n"
-        acsb += "aws_secret_access_key = " + c['aws_secret_access_key']+"\n"
-        acsb += "aws_mfa_device = " + c['aws_mfa_device']+"\n"
-        acsb += "\n"
+            aws_credentials_string_builder += acsb
+            aws_credentials_string_builder += "["+c["alias"] + "]"+"\n"
+            if c['role_arn']:
+                aws_credentials_string_builder += "role_arn = "              + c['role_arn'] +"\n"
+                aws_credentials_string_builder += "source_profile = "        + c['source_profile'] + "\n"
+            aws_credentials_string_builder += "aws_access_key_id = "     + sts_response['Credentials']['AccessKeyId'] +"\n"
+            aws_credentials_string_builder += "aws_secret_access_key = " + sts_response['Credentials']['SecretAccessKey']  +"\n"
+            aws_credentials_string_builder += "aws_session_token = "     + sts_response['Credentials']['SessionToken'] +"\n"
+            aws_credentials_string_builder += "aws_security_token = "    + sts_response['Credentials']['SessionToken'] +"\n"
+            aws_credentials_string_builder += "expiration = "            + sts_response['Credentials']['Expiration'].strftime('%Y-%m-%d %H:%M:%S') +"\n"
+            aws_credentials_string_builder += "\n"
 
-        print(acsb)
-        aws_credentials_string_builder += acsb
-
-        aws_credentials_string_builder += "["+c["name"] + "]"+"\n"
-        aws_credentials_string_builder += "aws_access_key_id = "     + sts_response['Credentials']['AccessKeyId'] +"\n"
-        aws_credentials_string_builder += "aws_secret_access_key = " + sts_response['Credentials']['SecretAccessKey']  +"\n"
-        aws_credentials_string_builder += "aws_session_token = "     + sts_response['Credentials']['SessionToken'] +"\n"
-        aws_credentials_string_builder += "aws_security_token = "    + sts_response['Credentials']['SessionToken'] +"\n"
-        aws_credentials_string_builder += "expiration = "            + sts_response['Credentials']['Expiration'].strftime('%Y-%m-%d %H:%M:%S') +"\n"
-        aws_credentials_string_builder += "\n"
-
-        aws_config_string_builder += "[profile "+c["name"] + "]"+"\n"
-        aws_config_string_builder += "output = json"+"\n"
-        aws_config_string_builder += "region = us-east-1"+"\n"+"\n"
+            aws_config_string_builder += "[profile "+c["alias"] + "]"+"\n"
+            aws_config_string_builder += "output = json"+"\n"
+            aws_config_string_builder += "region = us-east-1"+"\n"+"\n"
 
     except botocore.exceptions.ClientError as e:
-        print("An error occured while calling assume role: {}".format(e))
+        print("### ERROR: {}".format(e))
         print("### No changes will be saved, exiting")
         sys.exit()
 

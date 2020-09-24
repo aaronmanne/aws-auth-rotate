@@ -12,7 +12,7 @@ Create the file $HOME/.aws/aws-accounts.json  with the following format
     "accounts": [
         {
             "iamuser": "myiamusername",
-            "name": "ACCOUNTNAME",
+            "alias": "ACCOUNT ALIAS",
             "totp": "TOPTOPTOPTOPTOPTOPTOPTOPTOPTOPTOP",
             "aws_access_key_id": "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
             "aws_secret_access_key": "SUPERSECRETKEYAWSGAVEME",
